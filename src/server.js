@@ -9,6 +9,11 @@ const { processPDF } = require('./utils/pdfProcessing');
 const { detectDiagrams } = require('./utils/diagramsDetection');
 const ensureDirectories = require('./middleware/ensureDirectories');
 const errorLogger = require('./middleware/errorLogger');
+const { 
+    extractTextFromPDF, 
+    extractTextFromDocx, 
+    extractDataFromExcel 
+} = require('./utils/documentProcessing');
 const fs = require('fs');
 
 // Load environment variables
@@ -47,12 +52,21 @@ const storage = multer.diskStorage({
     }
 });
 
+// Update fileFilter in multer configuration
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = (process.env.ALLOWED_FILE_TYPES || '').split(',');
+    const allowedTypes = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'image/jpeg',
+        'image/png'
+    ];
+
     if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error('Invalid file type'), false);
+        cb(new Error('Invalid file type. Supported types: PDF, DOCX, XLSX, XLS, JPG, PNG'), false);
     }
 };
 
@@ -102,7 +116,7 @@ async function safeFileCleanup(filePath) {
 // Routes
 // Update the /api/extract route
 app.post('/api/extract', upload.single('file'), async (req, res, next) => {
-    let processedImage = null;
+    let processedFile = null;
     
     try {
         console.log('Processing upload request...');
@@ -120,28 +134,32 @@ app.post('/api/extract', upload.single('file'), async (req, res, next) => {
             mimetype: req.file.mimetype
         });
 
-        const fileType = path.extname(req.file.originalname).toLowerCase();
         let result = {};
 
         try {
-            switch (fileType) {
-                case '.png':
-                case '.jpg':
-                case '.jpeg':
-                    console.log('Processing image file...');
-                    processedImage = await processImage(req.file.path);
-                    console.log('Image processed, extracting text...');
-                    const text = await extractText(processedImage);
+            switch (req.file.mimetype) {
+                case 'application/pdf':
+                    result = { text: await extractTextFromPDF(req.file.path) };
+                    break;
+
+                case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                    result = { text: await extractTextFromDocx(req.file.path) };
+                    break;
+
+                case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+                case 'application/vnd.ms-excel':
+                    result = { data: await extractDataFromExcel(req.file.path) };
+                    break;
+
+                case 'image/jpeg':
+                case 'image/png':
+                    processedFile = await processImage(req.file.path);
+                    const text = await extractText(processedFile);
                     result = { text };
                     break;
 
-                case '.pdf':
-                    console.log('Processing PDF file...');
-                    result = await processPDF(req.file.path);
-                    break;
-
                 default:
-                    throw new Error(`Unsupported file type: ${fileType}`);
+                    throw new Error('Unsupported file type');
             }
 
             res.json({
@@ -151,8 +169,8 @@ app.post('/api/extract', upload.single('file'), async (req, res, next) => {
 
         } finally {
             // Cleanup files after response is sent
-            if (processedImage) {
-                await safeFileCleanup(processedImage);
+            if (processedFile) {
+                await safeFileCleanup(processedFile);
             }
             if (req.file) {
                 await safeFileCleanup(req.file.path);
@@ -164,56 +182,120 @@ app.post('/api/extract', upload.single('file'), async (req, res, next) => {
     }
 });
 
-// Test endpoint for image text extraction
-app.post('/api/test-ocr', upload.single('file'), async (req, res) => {
-    let processedImage = null;
+// Unified test endpoint for all file types
+app.post('/api/process', upload.single('file'), async (req, res) => {
+    let processedFile = null;
     
     try {
         if (!req.file) {
             return res.status(400).json({
                 error: {
-                    message: 'No image uploaded',
+                    message: 'No file uploaded',
                     code: 'NO_FILE'
                 }
             });
         }
 
-        const fileType = path.extname(req.file.originalname).toLowerCase();
-        if (!['.png', '.jpg', '.jpeg'].includes(fileType)) {
-            return res.status(400).json({
-                error: {
-                    message: 'Invalid file type. Please upload a PNG or JPEG image.',
-                    code: 'INVALID_FILE_TYPE'
+        console.log('Processing file:', {
+            filename: req.file.filename,
+            mimetype: req.file.mimetype,
+            path: req.file.path
+        });
+
+        let result;
+        // First, check by mimetype for documents
+        switch (req.file.mimetype) {
+            case 'application/pdf':
+                result = { text: await extractTextFromPDF(req.file.path) };
+                break;
+
+            case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                result = { text: await extractTextFromDocx(req.file.path) };
+                break;
+
+            case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            case 'application/vnd.ms-excel':
+                result = { data: await extractDataFromExcel(req.file.path) };
+                break;
+
+            case 'image/jpeg':
+            case 'image/png':
+                // Process image files
+                processedFile = await processImage(req.file.path);
+                const text = await extractText(processedFile);
+                result = { text };
+                break;
+
+            default:
+                // If mimetype check fails, try checking by file extension
+                const fileType = path.extname(req.file.originalname).toLowerCase();
+                if (['.png', '.jpg', '.jpeg'].includes(fileType)) {
+                    processedFile = await processImage(req.file.path);
+                    const text = await extractText(processedFile);
+                    result = { text };
+                } else if (fileType === '.pdf') {
+                    result = { text: await extractTextFromPDF(req.file.path) };
+                } else if (fileType === '.docx') {
+                    result = { text: await extractTextFromDocx(req.file.path) };
+                } else if (['.xlsx', '.xls'].includes(fileType)) {
+                    result = { data: await extractDataFromExcel(req.file.path) };
+                } else {
+                    return res.status(400).json({
+                        error: {
+                            message: 'Unsupported file type. Please upload a PDF, DOCX, XLSX, or image file (PNG/JPG).',
+                            code: 'UNSUPPORTED_FILE_TYPE'
+                        }
+                    });
                 }
-            });
         }
 
-        processedImage = await processImage(req.file.path);
-        const text = await extractText(processedImage);
-        console.log(text);
+        console.log("Result:", result);
 
-        res.json({
+        // Add metadata to the response
+        const response = {
             success: true,
-            data: {
-                text,
-                originalFile: req.file.originalname
+            data: result,
+            metadata: {
+                originalFile: req.file.originalname,
+                fileType: req.file.mimetype,
+                processedAt: new Date().toISOString()
             }
-        });
+        };
+
+         // For images and PDFs, add additional processing info
+         if (result.text) {
+            response.metadata.textLength = result.text.length;
+            response.metadata.wordCount = result.text.split(/\s+/).length;
+        }
+        // For Excel files, add sheet information
+        if (result.data) {
+            response.metadata.sheets = Object.keys(result.data);
+            response.metadata.totalRows = Object.values(result.data)
+                .reduce((total, sheet) => total + sheet.length, 0);
+        }
+
+        res.json(response);
+
     } catch (error) {
-        console.error('OCR Test Error:', error);
+        console.error('Processing error:', error);
         res.status(500).json({
             error: {
                 message: error.message,
-                code: error.code || 'OCR_ERROR'
+                code: error.code || 'PROCESSING_ERROR',
+                type: error.constructor.name
             }
         });
     } finally {
         // Cleanup files after response is sent
-        if (processedImage) {
-            await safeFileCleanup(processedImage);
-        }
-        if (req.file) {
-            await safeFileCleanup(req.file.path);
+        try {
+            if (processedFile) {
+                await safeFileCleanup(processedFile);
+            }
+            if (req.file) {
+                await safeFileCleanup(req.file.path);
+            }
+        } catch (cleanupError) {
+            console.error('Cleanup error:', cleanupError);
         }
     }
 });
