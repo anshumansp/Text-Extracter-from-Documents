@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, SafeAreaView, Image, Platform } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import CameraScanner from '../../components/CameraScanner';
 
 const { width } = Dimensions.get('window');
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 40 : 0;
 
 interface Feature {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -60,9 +61,24 @@ const HomeScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <Image
+            source={require('../../assets/images/logo-transparent.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <TouchableOpacity style={styles.notificationButton}>
+            <MaterialIcons name="notifications-none" size={28} color="#001F3F" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.mainContent}>
+        <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeText}>Welcome, Anshuman</Text> 
+          </View>
           <TouchableOpacity
             style={styles.scanButton}
             onPress={() => setShowScanner(true)}
@@ -70,6 +86,21 @@ const HomeScreen: React.FC = () => {
             <MaterialIcons name="document-scanner" size={40} color="#fff" />
             <Text style={styles.scanButtonText}>Start Scanning</Text>
           </TouchableOpacity>
+
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>24</Text>
+              <Text style={styles.statLabel}>Scans Today</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>85%</Text>
+              <Text style={styles.statLabel}>Accuracy</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>142</Text>
+              <Text style={styles.statLabel}>Total Scans</Text>
+            </View>
+          </View>
 
           <View style={styles.featuresContainer}>
             <Text style={styles.sectionTitle}>Key Features</Text>
@@ -84,14 +115,6 @@ const HomeScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>About Aarambh</Text>
-            <Text style={styles.infoText}>
-              Aarambh is your comprehensive document management solution, designed to revolutionize
-              how you handle information. This OCR module is part of a larger ecosystem that
-              seamlessly integrates document processing into your workflow.
-            </Text>
-          </View>
 
           <View style={styles.instructionsCard}>
             <Text style={styles.sectionTitle}>Quick Guide</Text>
@@ -104,6 +127,15 @@ const HomeScreen: React.FC = () => {
               </View>
             ))}
           </View>
+
+          <View style={styles.infoCard}>
+            <Text style={styles.infoTitle}>About Aarambh OCR</Text>
+            <Text style={styles.infoText}>
+              Aarambh OCR is your comprehensive document management solution, designed to revolutionize
+              how you handle information. This OCR module is part of a larger ecosystem that
+              seamlessly integrates document processing into your workflow.
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -114,6 +146,48 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    paddingTop: STATUSBAR_HEIGHT,
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingTop: 40,
+    paddingHorizontal: 20,
+    paddingBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  logo: {
+    width: 210,
+    height: 60,
+  },
+  welcomeContainer: {
+    flex: 1,
+    marginLeft: 5,
+    marginBottom: 10,
+  },
+  welcomeText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#001F3F',
+  },
+  notificationButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+  },
+  headerBottom: {
+    marginTop: 5,
+  },
+  tagline: {
+    fontSize: 14,
+    color: '#008080',
+    fontWeight: '500',
   },
   scrollView: {
     flex: 1,
@@ -124,33 +198,37 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 40,
+    top: 40 + STATUSBAR_HEIGHT,
     left: 20,
     zIndex: 1,
     padding: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  header: {
-    backgroundColor: '#001F3F',
-    padding: 24,
-    alignItems: 'center',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    letterSpacing: 2,
-  },
-  headerSubtitle: {
-    fontSize: 18,
-    color: '#008080',
-    marginTop: 8,
-  },
   mainContent: {
     padding: 20,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 25,
+  },
+  statCard: {
+    backgroundColor: '#F8F9FA',
+    padding: 15,
+    borderRadius: 12,
+    width: (width - 60) / 3,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#008080',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
   },
   scanButton: {
     backgroundColor: '#008080',
@@ -262,23 +340,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     flex: 1,
-  },
-  footer: {
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-  },
-  footerText: {
-    fontSize: 14,
-    color: '#001F3F',
-    fontWeight: '500',
-  },
-  version: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
   },
 });
 
